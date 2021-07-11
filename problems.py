@@ -1,4 +1,4 @@
-from drawing import Coords, Circle, Line, Polygon, Tags, Edge, Vertex, EntityTypes
+from drawing import Coords, Circle, Line, Polygon, Tags, Edge, Vertex, EntityTypes, distance
 import json
 
 PROBLEMS_PATH = './problems'
@@ -29,8 +29,8 @@ class Problem:
         scaled_vertices = list(map(scaling_function, self.figure['vertices']))
         scaled_vertices = list(map(moving_function, scaled_vertices))
         vertices_ids = []
-        for vertex in scaled_vertices:
-            v = Vertex(canvas, vertex, 3)
+        for order, vertex in enumerate(scaled_vertices):
+            v = Vertex(canvas, vertex, 3, order)
             v.draw()
             vertices_ids.append(v.id)
             entities.add_entity(v)
@@ -42,9 +42,12 @@ class Problem:
                      vertices_ids[pt1],
                      vertices_ids[pt2],
                      epsilon=self.epsilon,
+                     orig_length=distance(self.figure['vertices'][pt1], self.figure['vertices'][pt2]),
+                     # orig_length=distance(scaled_vertices[pt1], scaled_vertices[pt2]),
                      tag=Tags.FIGURE_EDGE)
             e.draw()
             entities.add_entity(e)
+
 
 def save_solution(entities, num_problem, scale=1, addx=0, addy=0):
     SOLUTIONS_PATH = './solutions'

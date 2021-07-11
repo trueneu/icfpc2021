@@ -2,7 +2,7 @@ import os.path
 from collections import defaultdict
 import tkinter
 import enum
-from drawing import Coords, Delta, CanvasShape, Circle, Line, Polygon, EntityTypes, Vertex, Edge, Tags
+from drawing import Coords, Delta, CanvasShape, Circle, Line, Polygon, EntityTypes, Vertex, Edge, Tags, Scale
 import problems
 import pickle
 from typing import Dict
@@ -39,6 +39,7 @@ class States(enum.Enum):
     DEFAULT = 0
     CREATING_CIRCLE = 1
     CREATING_LINE = 2
+
 
 
 Mode = Modes.DEFAULT
@@ -134,10 +135,16 @@ def save_state(entities, filename):
             'tag': v.tag,
             'fill': v.fill
         })
-        for adjacent_v_id in v.vertices_ids:
+        for adjacent_v_order, adjacent_v_id in enumerate(v.vertices_ids):
             v1_order = entities.vertices_id_to_order[v.id]
             v2_order = entities.vertices_id_to_order[adjacent_v_id]
-            edges.add(tuple(sorted([v1_order, v2_order])))
+            vs = sorted([v1_order, v2_order])
+            edge_id = v.edges_ids[adjacent_v_order]
+            edge = entities.data[edge_id]
+            edge_data = []
+            edge_data.extend(vs)
+            edge_data.append(edge.original_length)
+            edges.add(tuple(edge_data))
 
     savedata[EntityTypes.EDGE].extend(edges)
 
@@ -182,24 +189,27 @@ def load_state(canvas, entities, filename):
         entities.add_entity(p)
 
     vertices_ids = []
-    for v_data in loaddata[EntityTypes.VERTEX]:
-        v = Vertex(canvas, **v_data)
+    for order, v_data in enumerate(loaddata[EntityTypes.VERTEX]):
+        v = Vertex(canvas, order=order, **v_data)
         v.draw()
         entities.add_entity(v)
         vertices_ids.append(v.id)
 
     Epsilon = loaddata['epsilon']
 
-    for pt1, pt2 in loaddata[EntityTypes.EDGE]:
+    for pt1, pt2, orig_length in loaddata[EntityTypes.EDGE]:
         e = Edge(canvas,
                  entities.data[vertices_ids[pt1]].center,
                  entities.data[vertices_ids[pt2]].center,
                  vertices_ids[pt1],
                  vertices_ids[pt2],
                  epsilon=Epsilon,
+                 orig_length=orig_length,
                  tag=Tags.FIGURE_EDGE)
         e.draw()
         entities.add_entity(e)
+
+        # print(orig_length)
 
     return True
 
@@ -398,7 +408,16 @@ def refresh_state_label(label: tkinter.Label, filename):
 
 
 def refresh_coords_label(label: tkinter.Label, coords):
-    label.configure(text='coords: {}'.format(coords))
+    scale = Scale.scale
+    addx = Scale.addx
+    addy = Scale.addy
+    x, y = coords.x, coords.y
+    x -= addx
+    y -= addy
+    x = round(x / scale)
+    y = round(y / scale)
+
+    label.configure(text='coords: {}, orig_coords: X: {}, Y: {}'.format(coords, x, y))
 
 
 def refresh_epsilon_label(label: tkinter.Label, eps_hard_check):
@@ -421,7 +440,7 @@ def run_tk():
     entities = Entities()
     undo_history = UndoHistory(entities)
 
-    num_problem = 1
+    num_problem = 2
 
     # p1 = Coords(10, 10)
     # p2 = Coords(20, 20)
@@ -429,13 +448,9 @@ def run_tk():
     labels = create_labels(canvas)
     statefile = '{}.state'.format(num_problem)
 
-    scale = 15
-    addx = 100
-    addy = 0
-
     if not load_state(canvas, entities, statefile):
-        p = problems.Problem(problems.read_problem_json(1))
-        p.draw_problem(canvas, entities, scale=15, addx=100)
+        p = problems.Problem(problems.read_problem_json(num_problem))
+        p.draw_problem(canvas, entities, scale=Scale.scale, addx=Scale.addx, addy=Scale.addy)
         Epsilon = p.epsilon
 
     undo_history.make_snapshot()
@@ -466,7 +481,7 @@ def run_tk():
     canvas.bind_all('<x>', lambda _: remove_state(statefile))
     canvas.bind_all('<q>', make_quitter(root, entities))
     canvas.bind_all('<z>', lambda _: undo_history.rollback())
-    canvas.bind_all('<s>', make_save_solution_handler(entities, num_problem, scale, addx, addy))
+    canvas.bind_all('<s>', make_save_solution_handler(entities, num_problem, Scale.scale, Scale.addx, Scale.addy))
 
     canvas.bind_all('<Escape>', make_quitter(root, entities, statefile))
 

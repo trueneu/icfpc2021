@@ -97,8 +97,10 @@ if __name__ == "__main__":
             sys.exit(1)
 
         num = sys.argv[2]
-        pose_id = post_solution(token, num)
-        save_pose_id(num, pose_id['id'])
+        reply = post_solution(token, num)
+        print(reply)
+        if 'error' not in reply:
+            save_pose_id(num, reply['id'])
 
     elif sys.argv[1] == 'check':
         if len(sys.argv) < 3:

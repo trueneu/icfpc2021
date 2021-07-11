@@ -5,6 +5,13 @@ from typing import List, Tuple
 from abc import ABC, abstractmethod
 from itertools import chain
 
+class ScaleInfo:
+    def __init__(self, scale, addx, addy):
+        self.scale = scale
+        self.addx = addx
+        self.addy = addy
+
+Scale = ScaleInfo(15, 100, 50)
 
 class Coords:
     def __init__(self, x, y):
@@ -34,11 +41,13 @@ class Tags(enum.Enum):
 
 
 def distance(p1: Coords, p2: Coords):
-    return math.sqrt(
-        (p1.x - p2.x) ** 2
-        +
-        (p1.y - p2.y) ** 2
-    )
+    return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
+
+    # return math.sqrt(
+    #     (p1.x - p2.x) ** 2
+    #     +
+    #     (p1.y - p2.y) ** 2
+    # )
 
 
 class EntityTypes(enum.Enum):
@@ -145,7 +154,7 @@ class Circle(CanvasShape):
 
 
 class Vertex(Circle):
-    def __init__(self, canvas: tkinter.Canvas, center: Coords, radius: int, outline='black', fill='', width=1,
+    def __init__(self, canvas: tkinter.Canvas, center: Coords, radius: int, order: int, outline='black', fill='', width=1,
                  tag=Tags.FIGURE_VERTEX, vertices_ids=None, edges_ids=None):
         super().__init__(canvas, center, radius, outline, fill, width, tag)
         self.type = EntityTypes.VERTEX
@@ -157,9 +166,20 @@ class Vertex(Circle):
             self.edges_ids = []
         else:
             self.edges_ids = edges_ids
+        self.order = order
+        self.label = None
+
+    def draw(self):
+        super().draw()
+
+        font = ("DejaVu Sans Mono", 8)
+        self.label = tkinter.Label(self.canvas, text=str(self.order), font=font)
+        self.label.place(x=self.center.x + 10, y=self.center.y - 10)
+
 
     def move(self, new_center: Coords):
         super().move(new_center)
+        self.label.place(x=self.center.x + 10, y=self.center.y - 10)
 
     def add_vertex_id(self, vertex_id):
         self.vertices_ids.append(vertex_id)
@@ -208,10 +228,10 @@ class Line(CanvasShape):
 
 
 class Edge(Line):
-    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, epsilon: int, outline='black',
+    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, epsilon: int, orig_length, outline='black',
                  width=3, tag=Tags.FIGURE_EDGE):
         super().__init__(canvas, p1, p2, outline, width, tag)
-        self.original_length = distance(p1, p2)
+        self.original_length = orig_length
         self.v1_id = v1_id
         self.v2_id = v2_id
         self.type = EntityTypes.EDGE
@@ -254,8 +274,28 @@ class Edge(Line):
     def calc_color_based_on_length(self):
         original_length = self.original_length
         new_length = distance(self.p1, self.p2)
-        color_range = 128
-        color_offset = 128
+
+        scale = Scale.scale
+        addx = Scale.addx
+        addy = Scale.addy
+        x1 = self.p1.x
+        x2 = self.p2.x
+        y1 = self.p1.y
+        y2 = self.p2.y
+
+        x1 -= addx
+        x2 -= addx
+        y1 -= addy
+        y2 -= addy
+        x1 = round(x1 / scale)
+        x2 = round(x2 / scale)
+        y1 = round(y1 / scale)
+        y2 = round(y2 / scale)
+
+        new_length = distance(Coords(x1, y1), Coords(x2, y2))
+
+        color_range = 100
+        color_offset = 150
         margin = 2
 
         if abs(new_length / original_length - 1) > (self.epsilon / 1_000_000):
