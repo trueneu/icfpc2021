@@ -13,6 +13,7 @@ class Labels(enum.IntEnum):
     PROBLEM_NAME = 1
     STATE_NAME = 2
     COORDS = 3
+    EPSILON_HARD_CHECK = 4
 
 
 class Modifiers(enum.IntEnum):
@@ -44,11 +45,13 @@ Mode = Modes.DEFAULT
 State = States.DEFAULT
 Moving_Entity_Id = None
 Making_Move = False
+Epsilon_Hard_Check = False
 Epsilon = 0
+
 
 class Entities:
     def __init__(self):
-        self.data : Dict[CanvasShape] = {}
+        self.data: Dict[CanvasShape] = {}
         # fixme: is it really needed?
         self.vertex_to_edge = defaultdict(set)
         self.last_added = None
@@ -75,7 +78,6 @@ class Entities:
             self.vertices_id_to_order[entity.id] = len(self.ids_by_type[EntityTypes.VERTEX])
 
         self.ids_by_type[entity.type].append(entity.id)
-
 
 
 class UndoHistory:
@@ -149,17 +151,16 @@ def remove_state(filename):
     if os.path.exists(filepath):
         os.remove(filepath)
 
+
 # todo: color coding: vertex doesn't fit the hole
 # todo: rotation
 # todo: zoom?
 
 # 1st prio
-# todo: turn off hard epsilon check
 # todo: color coding: edge too short / too long
 # todo: solution export, solution save button
 # todo: bonuses appearance
 # todo: bonuses graph
-
 
 
 def load_state(canvas, entities, filename):
@@ -243,8 +244,10 @@ def delete_object(event):
     event.widget.children['!canvas'].delete('point')
 
 
-def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords_label: tkinter.Label, undo_history: UndoHistory):
+def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords_label: tkinter.Label,
+                              undo_history: UndoHistory):
     prev_mouse_pos = None
+
     def handler(event):
         global State, Moving_Entity_Id, Epsilon, Making_Move
         nonlocal prev_mouse_pos
@@ -288,12 +291,14 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
                         if entity.type == EntityTypes.VERTEX:
                             move_is_legal = True
 
-                            for edge_id in entity.edges_ids:
-                                edge = entities.data[edge_id]
-                                original_length = edge.original_length
-                                new_length = edge.length_if_moved(p)
-                                if abs(new_length / original_length - 1) > (Epsilon / 1_000_000):
-                                    move_is_legal = False
+                            if Epsilon_Hard_Check:
+                                for edge_id in entity.edges_ids:
+                                    edge = entities.data[edge_id]
+                                    original_length = edge.original_length
+                                    new_length = edge.length_if_moved(p)
+                                    if abs(new_length / original_length - 1) > (Epsilon / 1_000_000):
+                                        move_is_legal = False
+
                             if move_is_legal:
                                 for edge_id in entity.edges_ids:
                                     edge = entities.data[edge_id]
@@ -319,6 +324,7 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
 
         refresh_coords_label(coords_label, p)
         prev_mouse_pos = p
+
     return handler
 
 
@@ -349,6 +355,14 @@ def make_change_mode_handler(target_mode):
     return handler
 
 
+def make_change_epsilon_handler(epsilon_label):
+    def handler(_):
+        global Epsilon_Hard_Check
+        Epsilon_Hard_Check = not Epsilon_Hard_Check
+        refresh_epsilon_label(epsilon_label, Epsilon_Hard_Check)
+    return handler
+
+
 def create_labels(canvas: tkinter.Canvas):
     font = ("DejaVu Sans Mono", 8)
     y = 0
@@ -364,9 +378,14 @@ def create_labels(canvas: tkinter.Canvas):
     coords_label = tkinter.Label(canvas, text='coords: ', font=font)
     coords_label.place(x=0, y=y)
 
+    y += dy
+    epsilon_label = tkinter.Label(canvas, text='Eps hard: ', font=font)
+    epsilon_label.place(x=0, y=y)
+
     return {Labels.PROBLEM_NAME: problem_label,
             Labels.STATE_NAME: state_label,
-            Labels.COORDS: coords_label}
+            Labels.COORDS: coords_label,
+            Labels.EPSILON_HARD_CHECK: epsilon_label}
 
 
 def refresh_problem_label(label: tkinter.Label, num_problem):
@@ -379,6 +398,10 @@ def refresh_state_label(label: tkinter.Label, filename):
 
 def refresh_coords_label(label: tkinter.Label, coords):
     label.configure(text='coords: {}'.format(coords))
+
+
+def refresh_epsilon_label(label: tkinter.Label, eps_hard_check):
+    label.configure(text='Eps hard: {}'.format(Epsilon_Hard_Check))
 
 
 def run_tk():
@@ -394,7 +417,6 @@ def run_tk():
 
     # p1 = Coords(10, 10)
     # p2 = Coords(20, 20)
-
 
     labels = create_labels(canvas)
     statefile = '{}.state'.format(num_problem)
@@ -415,16 +437,16 @@ def run_tk():
     # for entity in (v1, v2, e):
     #     entities.add_entity(entity)
 
-
-
     refresh_problem_label(labels[Labels.PROBLEM_NAME], num_problem)
     refresh_state_label(labels[Labels.STATE_NAME], statefile)
+    refresh_epsilon_label(labels[Labels.EPSILON_HARD_CHECK], Epsilon_Hard_Check)
 
     canvas.bind('<Button-1>', make_mouse_button1_press_handler(entities, canvas))
     canvas.bind('<Button-3>', make_mouse_button2_press_handler(entities))
     canvas.bind('<Motion>', make_mouse_motion_handler(entities, canvas, labels[Labels.COORDS], undo_history))
     canvas.bind('<ButtonRelease-1>', make_button1_release_handler(undo_history))
     canvas.bind_all('<c>', make_change_mode_handler(Modes.CREATE_CIRCLE))
+    canvas.bind_all('<e>', make_change_epsilon_handler(labels[Labels.EPSILON_HARD_CHECK]))
     canvas.bind_all('<l>', make_change_mode_handler(Modes.CREATE_LINE))
     canvas.bind_all('<p>', make_change_mode_handler(Modes.CREATE_POLYGON))
     canvas.bind_all('<d>', make_change_mode_handler(Modes.DEFAULT))
