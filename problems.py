@@ -1,4 +1,4 @@
-from drawing import Coords, Circle, Line, Polygon, Tags, Edge, Vertex
+from drawing import Coords, Circle, Line, Polygon, Tags, Edge, Vertex, EntityTypes
 import json
 
 PROBLEMS_PATH = './problems'
@@ -46,9 +46,22 @@ class Problem:
             e.draw()
             entities.add_entity(e)
 
+def save_solution(entities, num_problem, scale=1, addx=0, addy=0):
+    SOLUTIONS_PATH = './solutions'
+    filename = '{}.solution'.format(num_problem)
+    filepath = '{}/{}'.format(SOLUTIONS_PATH, filename)
+    vertices = []
+    for v_id in entities.ids_by_type[EntityTypes.VERTEX]:
+        v = entities.data[v_id]
+        x, y = v.center.x, v.center.y
+        x -= addx
+        y -= addy
+        x = round(x / scale)
+        y = round(y / scale)
+        vertices.append([int(x), int(y)])
+    with open(filepath, 'w') as f:
+        json.dump({'vertices': vertices}, f)
 
-
-# todo: solution saving
 
 def read_problem_json(problem_number: int):
     with open('{}/{}.problem'.format(PROBLEMS_PATH, problem_number), mode='r') as f:

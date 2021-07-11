@@ -405,6 +405,13 @@ def refresh_epsilon_label(label: tkinter.Label, eps_hard_check):
     label.configure(text='Eps hard: {}'.format(Epsilon_Hard_Check))
 
 
+def make_save_solution_handler(entities, num_problem, scale, addx, addy):
+    def handler(_):
+        problems.save_solution(entities, num_problem, scale, addx, addy)
+
+    return handler
+
+
 def run_tk():
     global Epsilon
 
@@ -421,6 +428,11 @@ def run_tk():
 
     labels = create_labels(canvas)
     statefile = '{}.state'.format(num_problem)
+
+    scale = 15
+    addx = 100
+    addy = 0
+
     if not load_state(canvas, entities, statefile):
         p = problems.Problem(problems.read_problem_json(1))
         p.draw_problem(canvas, entities, scale=15, addx=100)
@@ -454,6 +466,7 @@ def run_tk():
     canvas.bind_all('<x>', lambda _: remove_state(statefile))
     canvas.bind_all('<q>', make_quitter(root, entities))
     canvas.bind_all('<z>', lambda _: undo_history.rollback())
+    canvas.bind_all('<s>', make_save_solution_handler(entities, num_problem, scale, addx, addy))
 
     canvas.bind_all('<Escape>', make_quitter(root, entities, statefile))
 
