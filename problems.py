@@ -41,6 +41,7 @@ class Problem:
                      scaled_vertices[pt2],
                      vertices_ids[pt1],
                      vertices_ids[pt2],
+                     epsilon=self.epsilon,
                      tag=Tags.FIGURE_EDGE)
             e.draw()
             entities.add_entity(e)

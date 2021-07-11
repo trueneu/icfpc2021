@@ -188,17 +188,18 @@ def load_state(canvas, entities, filename):
         entities.add_entity(v)
         vertices_ids.append(v.id)
 
+    Epsilon = loaddata['epsilon']
+
     for pt1, pt2 in loaddata[EntityTypes.EDGE]:
         e = Edge(canvas,
                  entities.data[vertices_ids[pt1]].center,
                  entities.data[vertices_ids[pt2]].center,
                  vertices_ids[pt1],
                  vertices_ids[pt2],
+                 epsilon=Epsilon,
                  tag=Tags.FIGURE_EDGE)
         e.draw()
         entities.add_entity(e)
-
-    Epsilon = loaddata['epsilon']
 
     return True
 

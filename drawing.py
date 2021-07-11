@@ -201,23 +201,21 @@ class Line(CanvasShape):
         pass
 
     def snapshot_save(self):
-        return [
-            self.p1, self.p2
-        ]
+        pass
 
     def snapshot_load(self, snapshot):
-        self.p1, self.p2 = snapshot
-        self.canvas.coords(self.id, self.p1.x, self.p1.y, self.p2.x, self.p2.y)
+        pass
 
 
 class Edge(Line):
-    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, outline='black',
-                 width=1, tag=Tags.FIGURE_EDGE):
+    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, epsilon: int, outline='black',
+                 width=3, tag=Tags.FIGURE_EDGE):
         super().__init__(canvas, p1, p2, outline, width, tag)
         self.original_length = distance(p1, p2)
         self.v1_id = v1_id
         self.v2_id = v2_id
         self.type = EntityTypes.EDGE
+        self.epsilon = epsilon
 
     def move(self, new_p: Coords):
         d1 = distance(self.p1, new_p)
@@ -228,11 +226,13 @@ class Edge(Line):
         else:
             self.canvas.coords(self.id, self.p1.x, self.p1.y, new_p.x, new_p.y)
             self.p2 = new_p
+        self.change_fill(self.calc_color_based_on_length())
 
     def parallel_move(self, dx, dy):
         self.canvas.coords(self.id, self.p1.x + dx, self.p1.y + dy, self.p2.x + dx, self.p2.y + dy)
         self.p1 = Coords(self.p1.x + dx, self.p1.y + dy)
         self.p2 = Coords(self.p2.x + dx, self.p2.y + dy)
+        self.change_fill(self.calc_color_based_on_length())
 
     def length_if_moved(self, new_p: Coords):
         d1 = distance(self.p1, new_p)
@@ -241,6 +241,37 @@ class Edge(Line):
             return distance(new_p, self.p2)
         else:
             return distance(self.p1, new_p)
+
+    def snapshot_save(self):
+        return [
+            self.p1, self.p2, self.epsilon
+        ]
+
+    def snapshot_load(self, snapshot):
+        self.p1, self.p2, self.epsilon = snapshot
+        self.canvas.coords(self.id, self.p1.x, self.p1.y, self.p2.x, self.p2.y)
+
+    def calc_color_based_on_length(self):
+        original_length = self.original_length
+        new_length = distance(self.p1, self.p2)
+        color_range = 128
+        color_offset = 128
+        margin = 2
+
+        if abs(new_length / original_length - 1) > (self.epsilon / 1_000_000):
+            if new_length > original_length:
+                red_amount = int(color_offset + \
+                             min((new_length / original_length - 1), (margin - 1)) * (color_range - 1))
+                color = '#{:02x}0000'.format(red_amount)
+                return color
+            else:
+                blue_amount = int(color_offset + \
+                             min((original_length / new_length - 1), (margin - 1)) * (color_range - 1))
+                color = '#0000{:02x}'.format(blue_amount)
+                return color
+        else:
+            return 'black'
+
 
 
 class Polygon(CanvasShape):
