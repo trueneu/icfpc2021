@@ -5,6 +5,8 @@ import enum
 from drawing import Coords, Delta, CanvasShape, Circle, Line, Polygon, EntityTypes, Vertex, Edge, Tags
 import problems
 import pickle
+from typing import Dict
+import copy
 
 
 class Labels(enum.IntEnum):
@@ -41,12 +43,12 @@ class States(enum.Enum):
 Mode = Modes.DEFAULT
 State = States.DEFAULT
 Moving_Entity_Id = None
+Making_Move = False
 Epsilon = 0
-
 
 class Entities:
     def __init__(self):
-        self.data = {}
+        self.data : Dict[CanvasShape] = {}
         # fixme: is it really needed?
         self.vertex_to_edge = defaultdict(set)
         self.last_added = None
@@ -73,6 +75,30 @@ class Entities:
             self.vertices_id_to_order[entity.id] = len(self.ids_by_type[EntityTypes.VERTEX])
 
         self.ids_by_type[entity.type].append(entity.id)
+
+
+
+class UndoHistory:
+    def __init__(self, entities: Entities):
+        self.entities = entities
+        self.undodata = []
+
+    def make_snapshot(self):
+        snapshot = []
+        for e_id in self.entities.data:
+            e = self.entities.data[e_id]
+            entity_snapshot = copy.deepcopy(e.snapshot_save())
+            snapshot.append({'id': e_id, 'snapshot': entity_snapshot})
+        self.undodata.append(snapshot)
+
+    # 01: {'id': 2, 'snapshot': [X: 404, Y: 479, 3]}
+    def rollback(self):
+        if self.undodata:
+            snapshot = self.undodata.pop()
+            for snapshot_element in snapshot:
+                e_id, entity_snapshot = snapshot_element['id'], snapshot_element['snapshot']
+                e = self.entities.data[e_id]
+                e.snapshot_load(entity_snapshot)
 
 
 def save_state(entities, filename):
@@ -123,12 +149,14 @@ def remove_state(filename):
     if os.path.exists(filepath):
         os.remove(filepath)
 
-# todo: turn off hard epsilon check
-# todo: color coding: too short / too long
 # todo: color coding: vertex doesn't fit the hole
 # todo: rotation
-# todo: solution export, solution save button
 # todo: zoom?
+
+# 1st prio
+# todo: turn off hard epsilon check
+# todo: color coding: edge too short / too long
+# todo: solution export, solution save button
 # todo: bonuses appearance
 # todo: bonuses graph
 
@@ -174,8 +202,6 @@ def load_state(canvas, entities, filename):
     return True
 
 
-# todo: saving state
-
 def make_mouse_button1_press_handler(entities: Entities, canvas: tkinter.Canvas):
     def handler(event):
         global Mode, State
@@ -217,10 +243,10 @@ def delete_object(event):
     event.widget.children['!canvas'].delete('point')
 
 
-def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords_label: tkinter.Label):
+def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords_label: tkinter.Label, undo_history: UndoHistory):
     prev_mouse_pos = None
     def handler(event):
-        global State, Moving_Entity_Id, Epsilon
+        global State, Moving_Entity_Id, Epsilon, Making_Move
         nonlocal prev_mouse_pos
 
         p = Coords(event.x, event.y)
@@ -236,6 +262,8 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
             if mousebtn1:
                 if shift:
                     if prev_mouse_pos:
+                        if not Making_Move:
+                            undo_history.make_snapshot()
                         dx = p.x - prev_mouse_pos.x
                         dy = p.y - prev_mouse_pos.y
                         for vertex_id in entities.ids_by_type[EntityTypes.VERTEX]:
@@ -244,6 +272,7 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
                         for edge_id in entities.ids_by_type[EntityTypes.EDGE]:
                             entity = entities.data[edge_id]
                             entity.parallel_move(dx, dy)
+                        Making_Move = True
 
                 else:
                     if not Moving_Entity_Id:
@@ -252,6 +281,9 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
                                 Moving_Entity_Id = entity_id
 
                     if Moving_Entity_Id:
+                        if not Making_Move:
+                            undo_history.make_snapshot()
+
                         entity = entities.data[Moving_Entity_Id]
                         if entity.type == EntityTypes.VERTEX:
                             move_is_legal = True
@@ -269,6 +301,7 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
                                 entity.move(p)
                         else:
                             entity.move(p)
+                        Making_Move = True
 
             for entity_id, entity in entities.data.items():
                 if entity.coords_inside(p):
@@ -289,10 +322,12 @@ def make_mouse_motion_handler(entities: Entities, canvas: tkinter.Canvas, coords
     return handler
 
 
-def make_button1_release_handler():
+def make_button1_release_handler(undo_history: UndoHistory):
     def handler(event):
-        global Moving_Entity_Id
+        global Moving_Entity_Id, Making_Move
         Moving_Entity_Id = None
+        if Making_Move:
+            Making_Move = False
 
     return handler
 
@@ -353,6 +388,7 @@ def run_tk():
     canvas = tkinter.Canvas(root, bg="white", height=2000, width=3000)
 
     entities = Entities()
+    undo_history = UndoHistory(entities)
 
     num_problem = 1
 
@@ -366,6 +402,8 @@ def run_tk():
         p = problems.Problem(problems.read_problem_json(1))
         p.draw_problem(canvas, entities, scale=15, addx=100)
         Epsilon = p.epsilon
+
+    undo_history.make_snapshot()
 
     # v1 = Vertex(canvas, Coords(100, 100), 30)
     # v2 = Vertex(canvas, Coords(300, 300), 30)
@@ -384,14 +422,16 @@ def run_tk():
 
     canvas.bind('<Button-1>', make_mouse_button1_press_handler(entities, canvas))
     canvas.bind('<Button-3>', make_mouse_button2_press_handler(entities))
-    canvas.bind('<Motion>', make_mouse_motion_handler(entities, canvas, labels[Labels.COORDS]))
-    canvas.bind('<ButtonRelease-1>', make_button1_release_handler())
+    canvas.bind('<Motion>', make_mouse_motion_handler(entities, canvas, labels[Labels.COORDS], undo_history))
+    canvas.bind('<ButtonRelease-1>', make_button1_release_handler(undo_history))
     canvas.bind_all('<c>', make_change_mode_handler(Modes.CREATE_CIRCLE))
     canvas.bind_all('<l>', make_change_mode_handler(Modes.CREATE_LINE))
     canvas.bind_all('<p>', make_change_mode_handler(Modes.CREATE_POLYGON))
     canvas.bind_all('<d>', make_change_mode_handler(Modes.DEFAULT))
     canvas.bind_all('<x>', lambda _: remove_state(statefile))
     canvas.bind_all('<q>', make_quitter(root, entities))
+    canvas.bind_all('<z>', lambda _: undo_history.rollback())
+
     canvas.bind_all('<Escape>', make_quitter(root, entities, statefile))
 
     canvas.pack()

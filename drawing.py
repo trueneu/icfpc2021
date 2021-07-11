@@ -3,6 +3,7 @@ import math
 import tkinter
 from typing import List, Tuple
 from abc import ABC, abstractmethod
+from itertools import chain
 
 
 class Coords:
@@ -30,7 +31,6 @@ class Tags(enum.Enum):
     HOLE = 'hole'
     FIGURE_VERTEX = 'figure_vertex'
     FIGURE_EDGE = 'figure_edge'
-
 
 
 def distance(p1: Coords, p2: Coords):
@@ -66,6 +66,14 @@ class CanvasShape(ABC):
 
     @abstractmethod
     def move(self, coords: Coords):
+        pass
+
+    @abstractmethod
+    def snapshot_save(self):
+        pass
+
+    @abstractmethod
+    def snapshot_load(self, snapshot):
         pass
 
     def change_fill(self, color):
@@ -121,6 +129,21 @@ class Circle(CanvasShape):
         self.center.y += delta.y
         self.top_left_coords, self.bottom_right_coords = Circle.TLBR_from_center_radius(self.center, self.radius)
 
+    def snapshot_save(self):
+        return [
+            self.center,
+            self.radius
+        ]
+
+    def snapshot_load(self, snapshot):
+        old_center, old_radius = self.center, self.radius
+        self.center, self.radius = snapshot
+
+        delta = Delta(self.center.x - old_center.x, self.center.y - old_center.y)
+        self.canvas.move(self.id, delta.x, delta.y)
+        self.top_left_coords, self.bottom_right_coords = Circle.TLBR_from_center_radius(self.center, self.radius)
+
+
 class Vertex(Circle):
     def __init__(self, canvas: tkinter.Canvas, center: Coords, radius: int, outline='black', fill='', width=1,
                  tag=Tags.FIGURE_VERTEX, vertices_ids=None, edges_ids=None):
@@ -143,6 +166,7 @@ class Vertex(Circle):
 
     def add_edge_id(self, edge_id):
         self.edges_ids.append(edge_id)
+
 
 class Line(CanvasShape):
     def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, outline='black', width=1,
@@ -176,9 +200,19 @@ class Line(CanvasShape):
     def change_outline(self, color):
         pass
 
+    def snapshot_save(self):
+        return [
+            self.p1, self.p2
+        ]
+
+    def snapshot_load(self, snapshot):
+        self.p1, self.p2 = snapshot
+        self.canvas.coords(self.id, self.p1.x, self.p1.y, self.p2.x, self.p2.y)
+
+
 class Edge(Line):
-    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, outline='black', width=1,
-                 tag=Tags.FIGURE_EDGE):
+    def __init__(self, canvas: tkinter.Canvas, p1: Coords, p2: Coords, v1_id: Vertex, v2_id: Vertex, outline='black',
+                 width=1, tag=Tags.FIGURE_EDGE):
         super().__init__(canvas, p1, p2, outline, width, tag)
         self.original_length = distance(p1, p2)
         self.v1_id = v1_id
@@ -189,7 +223,7 @@ class Edge(Line):
         d1 = distance(self.p1, new_p)
         d2 = distance(self.p2, new_p)
         if d1 < d2:
-            self.canvas.coords(self.id, new_p.x, new_p.y,  self.p2.x, self.p2.y)
+            self.canvas.coords(self.id, new_p.x, new_p.y, self.p2.x, self.p2.y)
             self.p1 = new_p
         else:
             self.canvas.coords(self.id, self.p1.x, self.p1.y, new_p.x, new_p.y)
@@ -207,7 +241,6 @@ class Edge(Line):
             return distance(new_p, self.p2)
         else:
             return distance(self.p1, new_p)
-
 
 
 class Polygon(CanvasShape):
@@ -246,3 +279,15 @@ class Polygon(CanvasShape):
 
     def change_outline(self, color):
         pass
+
+    def snapshot_save(self):
+        return [self.pts]
+
+    def snapshot_load(self, snapshot):
+        pts = snapshot[0]
+        getx = lambda e: e.x
+        gety = lambda e: e.y
+        pts_flat = list(chain.from_iterable((getx(e), gety(e)) for e in pts))
+        self.canvas.coords(self.id, *pts_flat)
+        self.pts = pts
+
